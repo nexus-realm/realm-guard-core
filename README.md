@@ -1,6 +1,6 @@
 # realm-guard-core
 
-Cœur partagé de **Realm Guard v2** : cryptographie E2EE (hiérarchie de clés) et
+Cœur partagé de **Realm Guard** : cryptographie E2EE (hiérarchie de clés) et
 **CRDT delta-state custom** pour la synchronisation multi-appareil *local-first*.
 
 Consommé par :
