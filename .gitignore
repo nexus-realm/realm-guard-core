@@ -1,3 +1,4 @@
 /target
+node_modules/
 # Cargo.lock EST versionné : dépendance privée, sensible côté sécurité
 # (builds reproductibles + audit des dépendances).

@@ -1,4 +1,4 @@
-//! `realm-guard-core` — cœur partagé (crypto E2EE + CRDT delta-state) de Realm Guard v2.
+//! `realm-guard-core` — cœur partagé (crypto E2EE + CRDT delta-state) de Realm Guard.
 //!
 //! Consommé par le serveur (`realm-guard-server`) et le client mobile (via FFI
 //! `flutter_rust_bridge`). Aucune dépendance plateforme : logique pure et
