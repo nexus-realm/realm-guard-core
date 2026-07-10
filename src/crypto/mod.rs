@@ -12,11 +12,13 @@
 mod aead;
 mod entry;
 mod kdf;
+mod recovery;
 mod vault_key;
 
 pub use aead::Ciphertext;
 pub use entry::{decrypt_entry, encrypt_entry};
 pub use kdf::derive_master_key;
+pub use recovery::{RecoveryCode, create_recovery_kit, recover_vault_key};
 pub use vault_key::{unwrap_vault_key, wrap_vault_key};
 
 use zeroize::{Zeroize, ZeroizeOnDrop};
