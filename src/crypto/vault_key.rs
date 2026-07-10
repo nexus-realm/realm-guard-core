@@ -1,12 +1,11 @@
 //! Clé racine du coffre ([`VaultKey`]) : génération aléatoire + enrobage.
 
-use chacha20poly1305::aead::Aead;
-use chacha20poly1305::{KeyInit, XChaCha20Poly1305, XNonce};
 use zeroize::Zeroize;
 
 use crate::error::{Error, Result};
 
-use super::{KEY_LEN, MasterKey, VaultKey, XNONCE_LEN};
+use super::aead::{Ciphertext, open, seal};
+use super::{KEY_LEN, MasterKey, VaultKey};
 
 impl VaultKey {
     /// Génère une clé de coffre aléatoire via le CSPRNG du système.
@@ -20,44 +19,20 @@ impl VaultKey {
     }
 }
 
-/// Clé de coffre enrobée : nonce + texte chiffré (opaque). Format stocké/transmis.
-#[derive(Clone, Debug)]
-pub struct WrappedKey {
-    /// Nonce XChaCha20-Poly1305 (192 bits).
-    pub nonce: [u8; XNONCE_LEN],
-    /// Texte chiffré (clé + tag d'authentification).
-    pub ciphertext: Vec<u8>,
-}
-
-/// Enrobe (chiffre) la [`VaultKey`] avec la [`MasterKey`] (KEK) via
-/// XChaCha20-Poly1305 et un nonce aléatoire.
+/// Enrobe (chiffre) la [`VaultKey`] avec la [`MasterKey`] (KEK).
 ///
 /// # Errors
 /// Échec du CSPRNG ou du chiffrement.
-pub fn wrap_vault_key(vault_key: &VaultKey, kek: &MasterKey) -> Result<WrappedKey> {
-    let cipher = XChaCha20Poly1305::new_from_slice(kek.as_bytes())
-        .map_err(|_| Error::Crypto("clé d'enrobage invalide".into()))?;
-    let mut nonce = [0u8; XNONCE_LEN];
-    getrandom::getrandom(&mut nonce).map_err(|e| Error::Crypto(format!("CSPRNG : {e}")))?;
-    let ciphertext = cipher
-        .encrypt(XNonce::from_slice(&nonce), vault_key.as_bytes().as_slice())
-        .map_err(|_| Error::Crypto("échec de l'enrobage".into()))?;
-    Ok(WrappedKey { nonce, ciphertext })
+pub fn wrap_vault_key(vault_key: &VaultKey, kek: &MasterKey) -> Result<Ciphertext> {
+    seal(kek.as_bytes(), vault_key.as_bytes())
 }
 
 /// Désenrobe (déchiffre + authentifie) la [`VaultKey`].
 ///
 /// # Errors
 /// Mauvaise clé, texte chiffré altéré, ou taille de clé invalide.
-pub fn unwrap_vault_key(wrapped: &WrappedKey, kek: &MasterKey) -> Result<VaultKey> {
-    let cipher = XChaCha20Poly1305::new_from_slice(kek.as_bytes())
-        .map_err(|_| Error::Crypto("clé d'enrobage invalide".into()))?;
-    let mut plaintext = cipher
-        .decrypt(
-            XNonce::from_slice(&wrapped.nonce),
-            wrapped.ciphertext.as_slice(),
-        )
-        .map_err(|_| Error::Crypto("désenrobage : authentification échouée".into()))?;
+pub fn unwrap_vault_key(wrapped: &Ciphertext, kek: &MasterKey) -> Result<VaultKey> {
+    let mut plaintext = open(kek.as_bytes(), wrapped)?;
     let bytes: [u8; KEY_LEN] = plaintext
         .as_slice()
         .try_into()

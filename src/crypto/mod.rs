@@ -9,11 +9,15 @@
 //! Primitives : Argon2id (KDF), XChaCha20-Poly1305 (AEAD) — crates auditées
 //! (RustCrypto), aucune crypto maison. Les secrets sont effacés au drop (`zeroize`).
 
+mod aead;
+mod entry;
 mod kdf;
 mod vault_key;
 
+pub use aead::Ciphertext;
+pub use entry::{decrypt_entry, encrypt_entry};
 pub use kdf::derive_master_key;
-pub use vault_key::{WrappedKey, unwrap_vault_key, wrap_vault_key};
+pub use vault_key::{unwrap_vault_key, wrap_vault_key};
 
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
