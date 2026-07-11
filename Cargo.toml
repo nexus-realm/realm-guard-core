@@ -14,5 +14,10 @@ bip39 = { version = "2", features = ["zeroize"] }
 chacha20poly1305 = "0.10"
 getrandom = "0.2"
 hkdf = "0.12"
+postcard = { version = "1", features = ["use-std"] }
+serde = { version = "1", features = ["derive"] }
 sha2 = "0.10"
 zeroize = { version = "1", features = ["derive"] }
+
+[dev-dependencies]
+proptest = "1"
