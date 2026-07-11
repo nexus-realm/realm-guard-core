@@ -7,9 +7,13 @@
 //! Correctness validée par tests property-based (commutativité, associativité,
 //! idempotence, convergence quel que soit l'ordre des deltas).
 
+mod awset;
+mod dot;
 mod hlc;
 mod lww;
 
+pub use awset::AddWinsSet;
+pub use dot::{Dot, DotContext};
 pub use hlc::{Hlc, HlcClock};
 pub use lww::LwwRegister;
 
