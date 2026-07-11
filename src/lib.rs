@@ -6,6 +6,7 @@
 
 #![forbid(unsafe_code)]
 
+pub mod auth;
 pub mod codec;
 pub mod crdt;
 pub mod crypto;
