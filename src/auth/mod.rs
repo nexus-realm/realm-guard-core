@@ -204,26 +204,33 @@ pub fn client_login_start(password: &[u8]) -> Result<ClientLoginStart> {
     })
 }
 
-/// **Serveur** — répond au `CredentialRequest` à partir du password file.
+/// **Serveur** — répond au `CredentialRequest`. `password_file` = `None` pour un
+/// utilisateur **inconnu** → opaque-ke fabrique une réponse indistinguable d'un
+/// vrai compte (**résistance à l'énumération** : le client échouera au `finish`).
 ///
 /// # Errors
 /// `server_setup`, `password_file` ou `request` invalide.
 pub fn server_login_start(
     server_setup: &[u8],
-    password_file: &[u8],
+    password_file: Option<&[u8]>,
     request: &[u8],
     username: &[u8],
 ) -> Result<ServerLoginStart> {
     let mut rng = OsRng;
     let setup = load_server_setup(server_setup)?;
-    let password_file = ServerRegistration::<RealmCipherSuite>::deserialize(password_file)
-        .map_err(|_| Error::Auth("password file invalide".into()))?;
+    let password_file = match password_file {
+        Some(bytes) => Some(
+            ServerRegistration::<RealmCipherSuite>::deserialize(bytes)
+                .map_err(|_| Error::Auth("password file invalide".into()))?,
+        ),
+        None => None,
+    };
     let request = CredentialRequest::deserialize(request)
         .map_err(|_| Error::Auth("credential request invalide".into()))?;
     let result = ServerLogin::start(
         &mut rng,
         &setup,
-        Some(password_file),
+        password_file,
         request,
         username,
         ServerLoginParameters::default(),
@@ -304,7 +311,8 @@ mod tests {
 
         let cl_start = client_login_start(PASSWORD).unwrap();
         let sl_start =
-            server_login_start(&server_setup, &password_file, &cl_start.request, USER).unwrap();
+            server_login_start(&server_setup, Some(&password_file), &cl_start.request, USER)
+                .unwrap();
         let cl_finish = client_login_finish(&cl_start.state, PASSWORD, &sl_start.response).unwrap();
         let server_session = server_login_finish(&sl_start.state, &cl_finish.finalization).unwrap();
 
@@ -322,10 +330,23 @@ mod tests {
 
         let cl_start = client_login_start(b"mauvais-mot-de-passe").unwrap();
         let sl_start =
-            server_login_start(&server_setup, &password_file, &cl_start.request, USER).unwrap();
+            server_login_start(&server_setup, Some(&password_file), &cl_start.request, USER)
+                .unwrap();
         // Le client détecte l'échec : l'enveloppe ne se déchiffre pas.
         let result =
             client_login_finish(&cl_start.state, b"mauvais-mot-de-passe", &sl_start.response);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn unknown_user_login_is_indistinguishable() {
+        let server_setup = generate_server_setup();
+        // Aucun compte enregistré : le serveur répond quand même (password_file = None).
+        let cl_start = client_login_start(PASSWORD).unwrap();
+        let sl_start =
+            server_login_start(&server_setup, None, &cl_start.request, b"inconnu").unwrap();
+        // Le client ne peut pas finaliser (enveloppe fabriquée) → échec côté client.
+        let result = client_login_finish(&cl_start.state, PASSWORD, &sl_start.response);
         assert!(result.is_err());
     }
 
