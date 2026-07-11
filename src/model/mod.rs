@@ -21,11 +21,13 @@
 
 use std::collections::BTreeMap;
 
+use serde::{Deserialize, Serialize};
+
 use crate::crdt::{AddWinsSet, DeviceId, DotContext, LwwRegister, Timestamp};
 use crate::error::{Error, Result};
 
 /// Identifiant global d'une entrée (UUID 16 octets) — unique entre appareils.
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug, Serialize, Deserialize)]
 pub struct EntryId([u8; 16]);
 
 impl EntryId {
@@ -54,12 +56,12 @@ impl EntryId {
 
 /// Étiquette compacte d'un champ. Sa sémantique (titre, secret…) est définie côté
 /// client ; le serveur ne voit qu'un tag opaque (métadonnées minimisées).
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug, Serialize, Deserialize)]
 pub struct FieldId(pub u16);
 
 /// Document coffre répliqué : présence des entrées (add-wins) + champs (LWW).
 /// `V` = valeur chiffrée opaque (en prod `crypto::Ciphertext`).
-#[derive(Clone, PartialEq, Eq, Debug)]
+#[derive(Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
 pub struct VaultDoc<V: Ord + Clone> {
     entries: AddWinsSet<EntryId>,
     fields: BTreeMap<EntryId, BTreeMap<FieldId, LwwRegister<V>>>,
@@ -245,6 +247,35 @@ mod tests {
         let mut merged = a.clone();
         merged.merge(&b);
         assert!(merged.contains_entry(&x));
+    }
+
+    #[test]
+    fn serialization_roundtrip_u8() {
+        let mut d: VaultDoc<u8> = VaultDoc::new();
+        let x = eid(1);
+        d.add_entry(x, dev(1));
+        d.set_field(x, FieldId(0), 7u8, ts(5, 1));
+        let bytes = crate::codec::encode(&d).unwrap();
+        let decoded: VaultDoc<u8> = crate::codec::decode(&bytes).unwrap();
+        assert_eq!(d, decoded);
+    }
+
+    #[test]
+    fn serialization_roundtrip_ciphertext_value() {
+        use crate::crypto::Ciphertext;
+        let mut d: VaultDoc<Ciphertext> = VaultDoc::new();
+        let x = eid(1);
+        d.add_entry(x, dev(1));
+        let ct = Ciphertext {
+            version: 1,
+            nonce: [3u8; 24],
+            ciphertext: vec![9, 8, 7],
+        };
+        d.set_field(x, FieldId(0), ct.clone(), ts(5, 1));
+        let bytes = crate::codec::encode(&d).unwrap();
+        let decoded: VaultDoc<Ciphertext> = crate::codec::decode(&bytes).unwrap();
+        assert_eq!(d, decoded);
+        assert_eq!(decoded.field(&x, FieldId(0)), Some(&ct));
     }
 
     #[derive(Clone, Debug)]

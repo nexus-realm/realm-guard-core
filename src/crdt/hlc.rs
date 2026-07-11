@@ -4,6 +4,8 @@
 //!
 //! Réf. Kulkarni et al., « Logical Physical Clocks » (2014).
 
+use serde::{Deserialize, Serialize};
+
 /// Horloge logique hybride : temps physique borné par un compteur logique.
 /// Ordre total lexicographique (`wall_ms` puis `counter`).
 ///
@@ -12,7 +14,9 @@
 /// `counter` très en deçà de `u32::MAX` (il faudrait 2³² écritures dans la même
 /// milliseconde). Hors de ce domaine (valeurs saturées), la monotonie ne peut
 /// être préservée — cas physiquement impossible.
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug, Default)]
+#[derive(
+    Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug, Default, Serialize, Deserialize,
+)]
 pub struct Hlc {
     /// Temps physique en millisecondes (epoch).
     pub wall_ms: u64,

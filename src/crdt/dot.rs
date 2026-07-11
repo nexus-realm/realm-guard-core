@@ -10,10 +10,12 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
+use serde::{Deserialize, Serialize};
+
 use super::DeviceId;
 
 /// Étiquette unique d'un ajout : appareil + compteur monotone propre à l'appareil.
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug, Serialize, Deserialize)]
 pub struct Dot {
     /// Appareil auteur de l'ajout.
     pub device: DeviceId,
@@ -30,7 +32,7 @@ impl Dot {
 }
 
 /// Contexte causal compact : ensemble des dots observés.
-#[derive(Clone, Default, PartialEq, Eq, Debug)]
+#[derive(Clone, Default, PartialEq, Eq, Debug, Serialize, Deserialize)]
 pub struct DotContext {
     /// Version vector : plus grand compteur **contigu** observé par appareil.
     cc: BTreeMap<DeviceId, u64>,

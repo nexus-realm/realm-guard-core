@@ -11,11 +11,13 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
+use serde::{Deserialize, Serialize};
+
 use super::DeviceId;
 use super::dot::{Dot, DotContext};
 
 /// Ensemble add-wins d'éléments `E`, répliquable sans coordination.
-#[derive(Clone, PartialEq, Eq, Debug)]
+#[derive(Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
 pub struct AddWinsSet<E: Ord + Clone> {
     /// Éléments présents → dots des ajouts encore actifs (jamais vide).
     entries: BTreeMap<E, BTreeSet<Dot>>,
@@ -182,6 +184,17 @@ mod tests {
         s.remove(&1);
         s.add(1u8, dev(1));
         assert!(s.contains(&1));
+    }
+
+    #[test]
+    fn serialization_roundtrip() {
+        let mut s = AddWinsSet::new();
+        s.add(1u8, dev(1));
+        s.add(2u8, dev(1));
+        s.remove(&1);
+        let bytes = crate::codec::encode(&s).unwrap();
+        let decoded: AddWinsSet<u8> = crate::codec::decode(&bytes).unwrap();
+        assert_eq!(s, decoded);
     }
 
     #[derive(Clone, Debug)]

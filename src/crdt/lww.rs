@@ -9,10 +9,12 @@
 //! même si un client hostile forge deux écritures au même horodatage — le serveur
 //! n'est pas fiable (E2EE). Ce join est idempotent, commutatif et associatif.
 
+use serde::{Deserialize, Serialize};
+
 use super::Timestamp;
 
 /// Registre LWW : dernière valeur écrite, ordonnée par [`Timestamp`].
-#[derive(Clone, PartialEq, Eq, Debug)]
+#[derive(Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
 pub struct LwwRegister<T> {
     value: T,
     ts: Timestamp,

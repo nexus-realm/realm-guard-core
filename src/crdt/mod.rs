@@ -18,10 +18,11 @@ pub use hlc::{Hlc, HlcClock};
 pub use lww::LwwRegister;
 
 use crate::error::{Error, Result};
+use serde::{Deserialize, Serialize};
 
 /// Identifiant stable d'un appareil (16 octets). Sert de **tiebreak déterministe**
 /// dans l'ordre total des [`Timestamp`]. Non secret.
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug, Serialize, Deserialize)]
 pub struct DeviceId([u8; 16]);
 
 impl DeviceId {
@@ -51,7 +52,7 @@ impl DeviceId {
 /// Horodatage total-ordonné d'une écriture : [`Hlc`] puis [`DeviceId`] (tiebreak).
 /// L'ordre lexicographique `(hlc, device)` départage **déterministement** deux
 /// écritures concurrentes portant le même HLC.
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug, Serialize, Deserialize)]
 pub struct Timestamp {
     /// Horloge logique hybride de l'écriture.
     pub hlc: Hlc,
