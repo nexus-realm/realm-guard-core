@@ -1,11 +1,15 @@
 # cargo-deny — chaîne d'approvisionnement (vulnérabilités, licences, sources).
 [advisories]
 version = 2
+# atomic-polyfill (dépôt archivé, non maintenu) est tiré transitivement par
+# postcard → heapless 0.7. Il est inerte sur nos cibles (atomiques natives) et
+# aucune mise à niveau n'est disponible → advisory informatif ignoré.
+ignore = ["RUSTSEC-2023-0089"]
 
 [licenses]
 version = 2
 # Licences autorisées pour les dépendances (à étendre au besoin).
-allow = ["MIT", "Apache-2.0", "BSD-3-Clause", "ISC", "Unicode-3.0", "Zlib", "CC0-1.0"]
+allow = ["MIT", "Apache-2.0", "BSD-3-Clause", "Unicode-3.0", "Zlib", "CC0-1.0"]
 # La crate elle-même est publish = false → non soumise à la vérif de licence.
 private = { ignore = true }
 
