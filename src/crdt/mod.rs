@@ -8,8 +8,10 @@
 //! idempotence, convergence quel que soit l'ordre des deltas).
 
 mod hlc;
+mod lww;
 
 pub use hlc::{Hlc, HlcClock};
+pub use lww::LwwRegister;
 
 use crate::error::{Error, Result};
 
