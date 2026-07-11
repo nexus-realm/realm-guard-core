@@ -5,7 +5,7 @@ version = 2
 [licenses]
 version = 2
 # Licences autorisées pour les dépendances (à étendre au besoin).
-allow = ["MIT", "Apache-2.0", "BSD-3-Clause", "ISC", "Unicode-3.0", "Zlib"]
+allow = ["MIT", "Apache-2.0", "BSD-3-Clause", "ISC", "Unicode-3.0", "Zlib", "CC0-1.0"]
 # La crate elle-même est publish = false → non soumise à la vérif de licence.
 private = { ignore = true }
 

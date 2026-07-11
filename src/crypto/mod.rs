@@ -1,12 +1,66 @@
-//! Cryptographie E2EE — hiérarchie de clés (implémenté au lot P0.2).
+//! Cryptographie E2EE — hiérarchie de clés.
 //!
-//! Modèle cible :
-//! - master password —Argon2id→ KEK (clé d'enrobage) ;
-//! - KEK —AEAD→ wrap/unwrap de la *root vault key* (VK, aléatoire) ;
-//! - VK —AEAD par entrée→ chiffrement des entrées du coffre ;
-//! - kit de récupération : VK également wrappée par un code de récup haute entropie.
+//! master password —Argon2id→ **KEK** ([`MasterKey`]) —AEAD→ enrobe/désenrobe la
+//! **root vault key** ([`VaultKey`], aléatoire, indépendante du mot de passe).
+//! La VK chiffrera les entrées du coffre (AEAD par entrée, P0.2c) et sera aussi
+//! enrobée par un code de récupération (kit de récup, P0.2d). Le serveur ne voit
+//! jamais ni le mot de passe ni la VK.
 //!
-//! Crates prévues : argon2, chacha20poly1305, hkdf, getrandom, zeroize, subtle.
+//! Primitives : Argon2id (KDF), XChaCha20-Poly1305 (AEAD) — crates auditées
+//! (RustCrypto), aucune crypto maison. Les secrets sont effacés au drop (`zeroize`).
 
-// TODO(P0.2): KeyDerivator (Argon2id), VaultKey, wrap/unwrap, AEAD par entrée,
-// kit de récupération. Revue sécurité requise avant merge.
+mod aead;
+mod entry;
+mod kdf;
+mod recovery;
+mod vault_key;
+
+pub use aead::Ciphertext;
+pub use entry::{decrypt_entry, encrypt_entry};
+pub use kdf::derive_master_key;
+pub use recovery::{RecoveryCode, create_recovery_kit, recover_vault_key};
+pub use vault_key::{unwrap_vault_key, wrap_vault_key};
+
+use zeroize::{Zeroize, ZeroizeOnDrop};
+
+/// Longueur des clés symétriques (256 bits).
+pub const KEY_LEN: usize = 32;
+/// Longueur du sel de dérivation (256 bits).
+pub const SALT_LEN: usize = 32;
+/// Longueur du nonce XChaCha20-Poly1305 (192 bits).
+pub const XNONCE_LEN: usize = 24;
+
+// Paramètres Argon2id, alignés sur l'app v1 (m = 64 MiB, t = 3, p = 1).
+const ARGON2_M_COST_KIB: u32 = 65_536;
+const ARGON2_T_COST: u32 = 3;
+const ARGON2_P_COST: u32 = 1;
+
+/// Clé d'enrobage (KEK) dérivée du mot de passe maître via Argon2id.
+/// Jamais persistée ; sert uniquement à enrober/désenrober la [`VaultKey`].
+#[derive(Clone, Zeroize, ZeroizeOnDrop)]
+pub struct MasterKey([u8; KEY_LEN]);
+
+/// Clé racine du coffre (VK), aléatoire et **indépendante du mot de passe**.
+/// Chiffre les entrées ; transférée aux appareils au pairing, jamais au serveur.
+#[derive(Clone, Zeroize, ZeroizeOnDrop)]
+pub struct VaultKey([u8; KEY_LEN]);
+
+impl MasterKey {
+    pub(crate) fn from_bytes(bytes: [u8; KEY_LEN]) -> Self {
+        Self(bytes)
+    }
+
+    pub(crate) fn as_bytes(&self) -> &[u8; KEY_LEN] {
+        &self.0
+    }
+}
+
+impl VaultKey {
+    pub(crate) fn from_bytes(bytes: [u8; KEY_LEN]) -> Self {
+        Self(bytes)
+    }
+
+    pub(crate) fn as_bytes(&self) -> &[u8; KEY_LEN] {
+        &self.0
+    }
+}
