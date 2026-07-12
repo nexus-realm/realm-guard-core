@@ -15,8 +15,11 @@
 //! et une `export_key` **côté client** stable (dérivée du mot de passe ; servira à
 //! protéger la VaultKey enrobée côté serveur en P1.4).
 
-use opaque_ke::argon2::Argon2;
+use opaque_ke::argon2::{Algorithm, Argon2, Params, Version};
 use opaque_ke::ciphersuite::CipherSuite;
+use opaque_ke::errors::InternalError;
+use opaque_ke::generic_array::{ArrayLength, GenericArray};
+use opaque_ke::ksf::Ksf;
 use opaque_ke::{
     ClientLogin, ClientLoginFinishParameters, ClientRegistration,
     ClientRegistrationFinishParameters, CredentialFinalization, CredentialRequest,
@@ -28,17 +31,49 @@ use zeroize::Zeroizing;
 
 use crate::error::{Error, Result};
 
+// Paramètres Argon2id du KSF OPAQUE, alignés sur la KEK du coffre
+// (cf. `crate::crypto` : m = 64 MiB, t = 3, p = 1) — nettement plus robustes que
+// les défauts de la crate argon2 (m = 19 MiB, t = 2).
+const KSF_M_COST_KIB: u32 = 65_536;
+const KSF_T_COST: u32 = 3;
+const KSF_P_COST: u32 = 1;
+
+/// KSF (key stretching function) d'OPAQUE : **Argon2id durci**. C'est ce KDF qui
+/// protège le `password_file` d'une attaque par dictionnaire **hors-ligne** (fuite
+/// conjointe base + `ServerSetup`) ; on l'aligne donc sur la KEK du coffre plutôt
+/// que sur les défauts (plus faibles) de la crate argon2.
+struct HardenedKsf(Argon2<'static>);
+
+impl Default for HardenedKsf {
+    fn default() -> Self {
+        let params = Params::new(KSF_M_COST_KIB, KSF_T_COST, KSF_P_COST, None)
+            .expect("paramètres Argon2 KSF valides");
+        Self(Argon2::new(Algorithm::Argon2id, Version::V0x13, params))
+    }
+}
+
+impl Ksf for HardenedKsf {
+    fn hash<L: ArrayLength<u8>>(
+        &self,
+        input: GenericArray<u8, L>,
+    ) -> core::result::Result<GenericArray<u8, L>, InternalError> {
+        // Délègue à l'implémentation Argon2 d'opaque-ke (sel nul : l'entrée est la
+        // sortie OPRF, déjà à haute entropie et unique par mot de passe).
+        Ksf::hash(&self.0, input)
+    }
+}
+
 /// Choix de primitives OPAQUE (constant client ↔ serveur).
 ///
-/// KSF = `Argon2` (feature `argon2`) — **params par défaut** de la crate argon2
-/// (m = 19 MiB, t = 2). Le renforcement (m = 64 MiB, t = 3, via un KSF newtype)
-/// est un point de la revue sécurité P1.
+/// OPRF/KE sur Ristretto255, échange 3DH, hash SHA-512, KSF = [`HardenedKsf`]
+/// (Argon2id 64 MiB / t3). Toute évolution de ces paramètres **invalide les
+/// `password_file` déjà enregistrés** (l'enveloppe ne se déchiffrerait plus).
 struct RealmCipherSuite;
 
 impl CipherSuite for RealmCipherSuite {
     type OprfCs = opaque_ke::Ristretto255;
     type KeyExchange = opaque_ke::TripleDh<opaque_ke::Ristretto255, sha2::Sha512>;
-    type Ksf = Argon2<'static>;
+    type Ksf = HardenedKsf;
 }
 
 /// Clé exportée par OPAQUE côté client (stable pour un mot de passe donné). Secrète.
@@ -365,5 +400,16 @@ mod tests {
         };
         assert!(!contains(&c_start.request));
         assert!(!contains(&response));
+    }
+
+    #[test]
+    fn hardened_ksf_stretches_input() {
+        use opaque_ke::generic_array::typenum::U32;
+
+        // `default()` construit l'Argon2 durci (params valides, sinon panique).
+        let ksf = HardenedKsf::default();
+        let output = Ksf::hash(&ksf, GenericArray::<u8, U32>::default()).unwrap();
+        // Un KSF non trivial transforme l'entrée (≠ identité).
+        assert_ne!(output, GenericArray::<u8, U32>::default());
     }
 }
