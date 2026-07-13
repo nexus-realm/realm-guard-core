@@ -41,6 +41,36 @@ pub fn unwrap_vault_key(wrapped: &Ciphertext, kek: &MasterKey) -> Result<VaultKe
     Ok(VaultKey::from_bytes(bytes))
 }
 
+/// Génère une VaultKey aléatoire et renvoie ses octets bruts. Variante **orientée
+/// octets** pour le pont FFI (le typage `VaultKey` reste interne au cœur).
+///
+/// # Errors
+/// Échec du CSPRNG de l'OS.
+pub fn generate_vault_key_bytes() -> Result<Vec<u8>> {
+    Ok(VaultKey::generate()?.as_bytes().to_vec())
+}
+
+/// Enrobe une VaultKey (octets) sous la KEK (octets) — variante orientée octets de
+/// [`wrap_vault_key`] pour le pont FFI. Les deux clés doivent faire [`KEY_LEN`] octets.
+///
+/// # Errors
+/// Taille de clé invalide, ou échec du chiffrement.
+pub fn wrap_vault_key_bytes(kek: &[u8], vault_key: &[u8]) -> Result<Ciphertext> {
+    let kek = MasterKey::from_slice(kek)?;
+    let vault_key = VaultKey::from_slice(vault_key)?;
+    wrap_vault_key(&vault_key, &kek)
+}
+
+/// Désenrobe une VaultKey et renvoie ses octets bruts — variante orientée octets de
+/// [`unwrap_vault_key`] pour le pont FFI.
+///
+/// # Errors
+/// Taille de KEK invalide, mauvaise clé, ou texte chiffré altéré.
+pub fn unwrap_vault_key_bytes(kek: &[u8], wrapped: &Ciphertext) -> Result<Vec<u8>> {
+    let kek = MasterKey::from_slice(kek)?;
+    Ok(unwrap_vault_key(wrapped, &kek)?.as_bytes().to_vec())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -90,5 +120,27 @@ mod tests {
         let vk = VaultKey::generate().unwrap();
         let wrapped = wrap_vault_key(&vk, &kek(b"password-1")).unwrap();
         assert!(unwrap_vault_key(&wrapped, &kek(b"password-2")).is_err());
+    }
+
+    #[test]
+    fn byte_wrappers_roundtrip() {
+        let kek = [7u8; KEY_LEN];
+        let vk = generate_vault_key_bytes().unwrap();
+        assert_eq!(vk.len(), KEY_LEN);
+        let wrapped = wrap_vault_key_bytes(&kek, &vk).unwrap();
+        assert_eq!(unwrap_vault_key_bytes(&kek, &wrapped).unwrap(), vk);
+    }
+
+    #[test]
+    fn byte_wrap_rejects_bad_key_length() {
+        assert!(wrap_vault_key_bytes(&[0u8; 16], &[1u8; KEY_LEN]).is_err());
+        assert!(wrap_vault_key_bytes(&[0u8; KEY_LEN], &[1u8; 10]).is_err());
+    }
+
+    #[test]
+    fn byte_unwrap_wrong_kek_rejected() {
+        let vk = generate_vault_key_bytes().unwrap();
+        let wrapped = wrap_vault_key_bytes(&[1u8; KEY_LEN], &vk).unwrap();
+        assert!(unwrap_vault_key_bytes(&[2u8; KEY_LEN], &wrapped).is_err());
     }
 }
