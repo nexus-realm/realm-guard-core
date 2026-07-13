@@ -21,9 +21,14 @@ pub use entry::{decrypt_entry, encrypt_entry};
 pub use kdf::derive_master_key;
 pub use recovery::{RecoveryCode, create_recovery_kit, recover_vault_key};
 pub use server_blob::{open_with_export_key, seal_with_export_key};
-pub use vault_key::{unwrap_vault_key, wrap_vault_key};
+pub use vault_key::{
+    generate_vault_key_bytes, unwrap_vault_key, unwrap_vault_key_bytes, wrap_vault_key,
+    wrap_vault_key_bytes,
+};
 
 use zeroize::{Zeroize, ZeroizeOnDrop};
+
+use crate::error::{Error, Result};
 
 /// Longueur des clés symétriques (256 bits).
 pub const KEY_LEN: usize = 32;
@@ -52,6 +57,17 @@ impl MasterKey {
         Self(bytes)
     }
 
+    /// Construit une KEK depuis une tranche, en validant la longueur.
+    pub(crate) fn from_slice(bytes: &[u8]) -> Result<Self> {
+        let array: [u8; KEY_LEN] = bytes.try_into().map_err(|_| {
+            Error::Crypto(format!(
+                "KEK de taille invalide ({} octets, {KEY_LEN} attendus)",
+                bytes.len()
+            ))
+        })?;
+        Ok(Self::from_bytes(array))
+    }
+
     pub(crate) fn as_bytes(&self) -> &[u8; KEY_LEN] {
         &self.0
     }
@@ -60,6 +76,17 @@ impl MasterKey {
 impl VaultKey {
     pub(crate) fn from_bytes(bytes: [u8; KEY_LEN]) -> Self {
         Self(bytes)
+    }
+
+    /// Construit une VaultKey depuis une tranche, en validant la longueur.
+    pub(crate) fn from_slice(bytes: &[u8]) -> Result<Self> {
+        let array: [u8; KEY_LEN] = bytes.try_into().map_err(|_| {
+            Error::Crypto(format!(
+                "VaultKey de taille invalide ({} octets, {KEY_LEN} attendus)",
+                bytes.len()
+            ))
+        })?;
+        Ok(Self::from_bytes(array))
     }
 
     pub(crate) fn as_bytes(&self) -> &[u8; KEY_LEN] {
