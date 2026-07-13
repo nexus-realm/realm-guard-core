@@ -19,6 +19,7 @@ postcard = { version = "1", features = ["use-std"] }
 rand = { version = "0.8", default-features = false, features = ["getrandom"] }
 serde = { version = "1", features = ["derive"] }
 sha2 = "0.10"
+x25519-dalek = { version = "2", features = ["static_secrets", "zeroize"] }
 zeroize = { version = "1", features = ["derive"] }
 
 [dev-dependencies]
