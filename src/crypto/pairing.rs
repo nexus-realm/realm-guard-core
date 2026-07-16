@@ -102,7 +102,7 @@ pub struct PairingOpenResult {
 }
 
 /// **Nouvel appareil** — démarre le pairing : génère une paire éphémère X25519 + un
-/// `pairing_id` aléatoire, et incorpore sa clé d'identité [`device_public_key`]
+/// `pairing_id` aléatoire, et incorpore sa clé d'identité `device_public_key`
 /// (Ed25519) au QR et à l'état. Renvoie l'état à conserver et le payload QR.
 ///
 /// # Errors
