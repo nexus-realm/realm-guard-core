@@ -10,6 +10,7 @@
 //! (RustCrypto), aucune crypto maison. Les secrets sont effacés au drop (`zeroize`).
 
 mod aead;
+mod device_key;
 mod entry;
 mod kdf;
 mod pairing;
@@ -18,6 +19,7 @@ mod server_blob;
 mod vault_key;
 
 pub use aead::Ciphertext;
+pub use device_key::{DeviceKeypair, device_sign, device_verify, generate_device_keypair};
 pub use entry::{decrypt_entry, encrypt_entry};
 pub use kdf::derive_master_key;
 pub use pairing::{
