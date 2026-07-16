@@ -89,6 +89,17 @@ pub struct PairingSealResult {
     pub response: Vec<u8>,
     /// SAS à afficher (doit correspondre à celui du nouvel appareil).
     pub sas: String,
+    /// Clé d'identité (Ed25519) du nouvel appareil, **extraite du QR** et donc liée
+    /// au transcript. C'est **celle-ci** que la source doit inscrire au registre du
+    /// compte : une clé reçue par un canal non lié au transcript (p. ex. une
+    /// enveloppe de transport) pourrait avoir été substituée, et inscrirait alors
+    /// l'appareil d'un attaquant.
+    ///
+    /// ⚠️ **N'inscrire qu'après confirmation du SAS par l'utilisateur.** Sur un QR
+    /// substitué (MITM), cette valeur est la clé de l'attaquant : le SAS diverge et
+    /// l'ouverture échoue côté nouvel appareil, mais une inscription faite *avant*
+    /// la confirmation aurait déjà enrôlé l'attaquant.
+    pub device_public_key: Vec<u8>,
 }
 
 /// Résultat de l'ouverture côté **nouvel appareil**.
@@ -140,7 +151,8 @@ pub fn pairing_start(device_public_key: &[u8]) -> Result<PairingStart> {
 
 /// **Appareil source** — scelle `{account_id, vault_key}` vers le nouvel appareil
 /// décrit par le QR. Le `device_public_key` du QR est lié au transcript (SAS/AEAD).
-/// Renvoie la réponse à relayer + le SAS à afficher.
+/// Renvoie la réponse à relayer, le SAS à afficher, et le `device_public_key` du QR
+/// (à inscrire au registre du compte — cf. [`PairingSealResult`]).
 ///
 /// # Errors
 /// `account_id` de longueur invalide, QR invalide, échec du CSPRNG ou du chiffrement.
@@ -181,6 +193,7 @@ pub fn pairing_seal(qr: &[u8], account_id: &[u8], vault_key: &[u8]) -> Result<Pa
     Ok(PairingSealResult {
         response: codec::encode(&sealed)?,
         sas,
+        device_public_key: request.device_public_key.to_vec(),
     })
 }
 
@@ -271,6 +284,8 @@ mod tests {
 
         assert_eq!(opened.vault_key, vault_key);
         assert_eq!(opened.account_id, ACCOUNT_ID);
+        // La source récupère la clé d'appareil du QR (à inscrire au registre).
+        assert_eq!(sealed.device_public_key, DEVICE_PK);
         // Les deux appareils affichent le **même** SAS (6 chiffres).
         assert_eq!(sealed.sas, opened.sas);
         assert_eq!(opened.sas.len(), 6);
@@ -308,6 +323,10 @@ mod tests {
         let tampered_qr = codec::encode(&request).unwrap();
 
         let sealed = pairing_seal(&tampered_qr, &ACCOUNT_ID, &vault_key).unwrap();
+        // La source reçoit la clé **telle qu'elle est dans le QR** — donc celle de
+        // l'attaquant ici. D'où l'obligation de n'inscrire au registre qu'**après**
+        // confirmation du SAS par l'utilisateur.
+        assert_eq!(sealed.device_public_key, [0xAAu8; DEVICE_PK_LEN]);
         // Le nouvel appareil dérive le transcript avec SON device_pk (via l'état) →
         // clé différente → ouverture impossible.
         assert!(pairing_open(&start.state, &sealed.response).is_err());
