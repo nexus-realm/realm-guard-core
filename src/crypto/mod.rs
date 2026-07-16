@@ -23,7 +23,9 @@ pub use device_key::{DeviceKeypair, device_sign, device_verify, generate_device_
 pub use entry::{decrypt_entry, encrypt_entry};
 pub use kdf::derive_master_key;
 pub use pairing::{
-    PairingOpenResult, PairingSealResult, PairingStart, pairing_open, pairing_seal, pairing_start,
+    PairingConfirm, PairingOpenResult, PairingSourceBegin, PairingStart,
+    pairing_new_device_confirm, pairing_open, pairing_source_begin, pairing_source_seal,
+    pairing_start,
 };
 pub use recovery::{RecoveryCode, create_recovery_kit, recover_vault_key};
 pub use server_blob::{open_with_export_key, seal_with_export_key};
