@@ -36,6 +36,23 @@ impl Hlc {
             },
         }
     }
+
+    /// HLC **local** suivant, strictement supérieur à `self`. `now_ms` = temps
+    /// physique courant ; peut régresser sans casser l'ordre (repli sur `counter`).
+    ///
+    /// Exposé pour la couche FFI, qui porte l'horloge d'un appareil sous forme
+    /// `(wall_ms, counter)` et n'a donc pas d'[`HlcClock`] vivant.
+    #[must_use]
+    pub fn next_local(self, now_ms: u64) -> Self {
+        if now_ms > self.wall_ms {
+            Self {
+                wall_ms: now_ms,
+                counter: 0,
+            }
+        } else {
+            self.inc()
+        }
+    }
 }
 
 /// Générateur d'HLC d'un appareil : conserve le dernier HLC émis pour garantir la
@@ -61,14 +78,7 @@ impl HlcClock {
     /// Événement **local** : renvoie un HLC strictement supérieur au précédent.
     /// `now_ms` = temps physique courant ; peut régresser sans casser l'ordre.
     pub fn tick(&mut self, now_ms: u64) -> Hlc {
-        self.last = if now_ms > self.last.wall_ms {
-            Hlc {
-                wall_ms: now_ms,
-                counter: 0,
-            }
-        } else {
-            self.last.inc()
-        };
+        self.last = self.last.next_local(now_ms);
         self.last
     }
 
@@ -104,6 +114,32 @@ impl HlcClock {
 mod tests {
     use super::*;
     use proptest::prelude::*;
+
+    #[test]
+    fn next_local_advances_and_stays_strictly_greater() {
+        let base = Hlc {
+            wall_ms: 100,
+            counter: 3,
+        };
+        // Le temps physique avance → nouvelle ms, compteur remis à 0.
+        assert_eq!(
+            base.next_local(200),
+            Hlc {
+                wall_ms: 200,
+                counter: 0
+            }
+        );
+        // Le temps stagne/régresse → on incrémente le compteur, jamais d'égalité.
+        let next = base.next_local(50);
+        assert_eq!(
+            next,
+            Hlc {
+                wall_ms: 100,
+                counter: 4
+            }
+        );
+        assert!(next > base);
+    }
 
     #[test]
     fn tick_resets_counter_when_wall_advances() {
