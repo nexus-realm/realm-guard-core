@@ -18,6 +18,21 @@
 //! Mapping v1 (indicatif, côté client) : un *credential* = une entrée {titre,
 //! secret, réf. profil} ; un *profil* = une entrée {nom, emails}. Les PK
 //! auto-incrément de v1 deviennent des [`EntryId`] UUID à la migration.
+//!
+//! # Synchronisation par **deltas** (P3)
+//!
+//! Chaque mutation renvoie un **delta** : un `VaultDoc` partiel, join-compatible avec
+//! l'état complet. Le modèle est **delta-interval** : on *expédie* les deltas
+//! produits (vers le log serveur), on ne les *recalcule* pas depuis un version
+//! vector. Un pair converge en fusionnant le flux de deltas — c'est l'invariant
+//! testé par `delta_stream_converges_to_full_state`.
+//!
+//! Le join étant idempotent / commutatif / associatif, la livraison peut être
+//! **désordonnée et dupliquée** (« at-least-once ») sans casser la convergence : le
+//! log serveur n'a donc pas à garantir l'ordre ni l'unicité.
+//!
+//! Un pair trop en retard (log compacté) se resynchronise par **snapshot** : un join
+//! de l'état complet, correct par la même propriété.
 
 use std::collections::BTreeMap;
 
@@ -83,15 +98,26 @@ impl<V: Ord + Clone> VaultDoc<V> {
         }
     }
 
-    /// Marque une entrée présente (sémantique add-wins).
-    pub fn add_entry(&mut self, id: EntryId, device: DeviceId) {
-        self.entries.add(id, device);
+    /// Marque une entrée présente (sémantique add-wins). Renvoie le **delta** à
+    /// propager (cf. doc du module).
+    pub fn add_entry(&mut self, id: EntryId, device: DeviceId) -> Self {
+        Self {
+            entries: self.entries.add(id, device),
+            fields: BTreeMap::new(),
+        }
     }
 
     /// Retire une entrée. Les registres de champs sont **conservés** (pour ne pas
     /// perdre d'écritures concurrentes en cas de ré-ajout) ; leur GC est différée.
-    pub fn remove_entry(&mut self, id: &EntryId) {
-        self.entries.remove(id);
+    /// Renvoie le **delta** à propager.
+    ///
+    /// Le delta ne porte **aucune** entrée : c'est son contexte causal (les dots
+    /// retirés) qui véhicule la suppression chez le pair.
+    pub fn remove_entry(&mut self, id: &EntryId) -> Self {
+        Self {
+            entries: self.entries.remove(id),
+            fields: BTreeMap::new(),
+        }
     }
 
     /// L'entrée est-elle présente ?
@@ -117,14 +143,29 @@ impl<V: Ord + Clone> VaultDoc<V> {
     }
 
     /// Écrit (LWW) la valeur d'un champ. N'affecte pas la présence de l'entrée.
-    pub fn set_field(&mut self, id: EntryId, field: FieldId, value: V, ts: Timestamp) {
+    /// Renvoie le **delta** à propager.
+    ///
+    /// Le delta porte le registre **résultant**, pas l'écriture tentée : `set` étant
+    /// conditionnel (LWW), une écriture perdante laisse l'état inchangé — propager le
+    /// registre résultant reste correct (le join est idempotent) et reproduit
+    /// fidèlement l'issue chez le pair.
+    pub fn set_field(&mut self, id: EntryId, field: FieldId, value: V, ts: Timestamp) -> Self {
         let entry_fields = self.fields.entry(id).or_default();
-        match entry_fields.get_mut(&field) {
-            Some(reg) => reg.set(value, ts),
-            None => {
-                entry_fields.insert(field, LwwRegister::new(value, ts));
+        let register = match entry_fields.get_mut(&field) {
+            Some(reg) => {
+                reg.set(value, ts);
+                reg.clone()
             }
-        }
+            None => {
+                let reg = LwwRegister::new(value, ts);
+                entry_fields.insert(field, reg.clone());
+                reg
+            }
+        };
+
+        let mut delta = Self::new();
+        delta.fields.insert(id, BTreeMap::from([(field, register)]));
+        delta
     }
 
     /// Valeur d'un champ, si (et seulement si) l'entrée est présente.
@@ -134,6 +175,19 @@ impl<V: Ord + Clone> VaultDoc<V> {
             return None;
         }
         self.fields.get(id)?.get(&field).map(LwwRegister::value)
+    }
+
+    /// Énumère `(FieldId, valeur)` des champs d'une entrée, triés par `FieldId` — pour
+    /// **projeter** une entrée vers le store local (P3.3).
+    ///
+    /// N'exige pas la présence : l'appelant itère d'abord [`Self::entry_ids`] (présentes),
+    /// puis énumère leurs champs. Les registres conservés d'une entrée supprimée
+    /// (tombstone) ne sont donc pas exposés par ce chemin.
+    pub fn entry_fields(&self, id: &EntryId) -> impl Iterator<Item = (FieldId, &V)> {
+        self.fields
+            .get(id)
+            .into_iter()
+            .flat_map(|fields| fields.iter().map(|(field, reg)| (*field, reg.value())))
     }
 
     /// Contexte causal de la présence (version vector) — pour la synchro (P3).
@@ -193,6 +247,24 @@ mod tests {
         assert!(d.contains_entry(&x));
         assert_eq!(d.field(&x, FieldId(0)), Some(&42));
         assert_eq!(d.field(&x, FieldId(9)), None);
+    }
+
+    #[test]
+    fn entry_fields_enumerates_sorted() {
+        let mut d = VaultDoc::new();
+        let x = eid(1);
+        d.add_entry(x, dev(1));
+        d.set_field(x, FieldId(2), 20u8, ts(10, 1));
+        d.set_field(x, FieldId(0), 0u8, ts(11, 1));
+        d.set_field(x, FieldId(1), 10u8, ts(12, 1));
+
+        let fields: Vec<_> = d.entry_fields(&x).map(|(f, v)| (f, *v)).collect();
+        assert_eq!(
+            fields,
+            vec![(FieldId(0), 0), (FieldId(1), 10), (FieldId(2), 20)]
+        );
+        // Entrée sans champ → itérateur vide (pas de panique).
+        assert_eq!(d.entry_fields(&eid(9)).count(), 0);
     }
 
     #[test]
@@ -300,22 +372,29 @@ mod tests {
     // Construit un document en appliquant `ops` sur un appareil donné (horloge
     // propre : chaque `set` avance le HLC).
     fn build(device: u8, ops: &[Op]) -> VaultDoc<u8> {
+        build_with_deltas(device, ops).0
+    }
+
+    /// Construit un document **et** collecte les deltas produits, dans l'ordre.
+    fn build_with_deltas(device: u8, ops: &[Op]) -> (VaultDoc<u8>, Vec<VaultDoc<u8>>) {
         let d = dev(device);
         let mut clock = HlcClock::new();
         let mut doc = VaultDoc::new();
+        let mut deltas = Vec::new();
         let mut now = 0u64;
         for op in ops {
             now += 1;
-            match op {
+            let delta = match op {
                 Op::Add(n) => doc.add_entry(eid(*n), d),
                 Op::Remove(n) => doc.remove_entry(&eid(*n)),
                 Op::Set(n, f, v) => {
                     let stamp = Timestamp::new(clock.tick(now), d);
-                    doc.set_field(eid(*n), FieldId(*f), *v, stamp);
+                    doc.set_field(eid(*n), FieldId(*f), *v, stamp)
                 }
-            }
+            };
+            deltas.push(delta);
         }
-        doc
+        (doc, deltas)
     }
 
     proptest! {
@@ -351,6 +430,63 @@ mod tests {
             let mut right = a.clone();
             right.merge(&bc);
             prop_assert_eq!(left, right);
+        }
+
+        /// **L'invariant qui autorise le log de deltas (P3.2)** : un pair qui ne voit
+        /// que le *flux de deltas* converge vers le même état que la source. Sans
+        /// lui, la synchro par deltas serait fausse et il faudrait tout renvoyer.
+        #[test]
+        fn delta_stream_converges_to_full_state(ops in ops_strategy()) {
+            let (source, deltas) = build_with_deltas(1, &ops);
+
+            let mut peer = VaultDoc::new();
+            for delta in &deltas {
+                peer.merge(delta);
+            }
+
+            prop_assert_eq!(peer, source);
+        }
+
+        /// Livraison **désordonnée et dupliquée** : la convergence n'en dépend pas.
+        /// C'est ce qui permet au log serveur de se contenter d'« at-least-once »,
+        /// sans garantie d'ordre ni de dédoublonnage.
+        #[test]
+        fn delta_stream_tolerates_reorder_and_duplicates(ops in ops_strategy()) {
+            let (source, deltas) = build_with_deltas(1, &ops);
+
+            let mut peer = VaultDoc::new();
+            for delta in deltas.iter().rev() {
+                peer.merge(delta);
+            }
+            for delta in &deltas {
+                peer.merge(delta); // redélivrance
+            }
+
+            prop_assert_eq!(peer, source);
+        }
+
+        /// Deux appareils qui échangent leurs deltas convergent — et vers le même
+        /// état qu'un échange d'états complets.
+        #[test]
+        fn delta_exchange_matches_full_state_exchange(oa in ops_strategy(), ob in ops_strategy()) {
+            let (a, da) = build_with_deltas(1, &oa);
+            let (b, db) = build_with_deltas(2, &ob);
+
+            // Par deltas : chacun applique le flux de l'autre.
+            let mut a_delta = a.clone();
+            for delta in &db {
+                a_delta.merge(delta);
+            }
+            let mut b_delta = b.clone();
+            for delta in &da {
+                b_delta.merge(delta);
+            }
+            prop_assert_eq!(&a_delta, &b_delta);
+
+            // Par états complets : même résultat.
+            let mut a_full = a.clone();
+            a_full.merge(&b);
+            prop_assert_eq!(&a_delta, &a_full);
         }
 
         /// Trois répliques convergent quel que soit l'ordre des fusions.
