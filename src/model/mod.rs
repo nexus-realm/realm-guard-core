@@ -177,6 +177,19 @@ impl<V: Ord + Clone> VaultDoc<V> {
         self.fields.get(id)?.get(&field).map(LwwRegister::value)
     }
 
+    /// Énumère `(FieldId, valeur)` des champs d'une entrée, triés par `FieldId` — pour
+    /// **projeter** une entrée vers le store local (P3.3).
+    ///
+    /// N'exige pas la présence : l'appelant itère d'abord [`Self::entry_ids`] (présentes),
+    /// puis énumère leurs champs. Les registres conservés d'une entrée supprimée
+    /// (tombstone) ne sont donc pas exposés par ce chemin.
+    pub fn entry_fields(&self, id: &EntryId) -> impl Iterator<Item = (FieldId, &V)> {
+        self.fields
+            .get(id)
+            .into_iter()
+            .flat_map(|fields| fields.iter().map(|(field, reg)| (*field, reg.value())))
+    }
+
     /// Contexte causal de la présence (version vector) — pour la synchro (P3).
     #[must_use]
     pub fn presence_context(&self) -> &DotContext {
@@ -234,6 +247,24 @@ mod tests {
         assert!(d.contains_entry(&x));
         assert_eq!(d.field(&x, FieldId(0)), Some(&42));
         assert_eq!(d.field(&x, FieldId(9)), None);
+    }
+
+    #[test]
+    fn entry_fields_enumerates_sorted() {
+        let mut d = VaultDoc::new();
+        let x = eid(1);
+        d.add_entry(x, dev(1));
+        d.set_field(x, FieldId(2), 20u8, ts(10, 1));
+        d.set_field(x, FieldId(0), 0u8, ts(11, 1));
+        d.set_field(x, FieldId(1), 10u8, ts(12, 1));
+
+        let fields: Vec<_> = d.entry_fields(&x).map(|(f, v)| (f, *v)).collect();
+        assert_eq!(
+            fields,
+            vec![(FieldId(0), 0), (FieldId(1), 10), (FieldId(2), 20)]
+        );
+        // Entrée sans champ → itérateur vide (pas de panique).
+        assert_eq!(d.entry_fields(&eid(9)).count(), 0);
     }
 
     #[test]
