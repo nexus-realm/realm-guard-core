@@ -20,7 +20,7 @@ mod vault_key;
 
 pub use aead::Ciphertext;
 pub use device_key::{DeviceKeypair, device_sign, device_verify, generate_device_keypair};
-pub use entry::{decrypt_entry, encrypt_entry};
+pub use entry::{decrypt_entry, decrypt_entry_bytes, encrypt_entry, encrypt_entry_bytes};
 pub use kdf::derive_master_key;
 pub use pairing::{
     PairingConfirm, PairingOpenResult, PairingSourceBegin, PairingStart,

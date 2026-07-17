@@ -61,6 +61,33 @@ pub fn decrypt_entry(
     result
 }
 
+/// Variante **orientée octets** de [`encrypt_entry`] (pour le FFI) : `vault_key` en
+/// tranche (32 o), sortie = `Ciphertext` **encodé** (postcard). Le FFI ne manipule
+/// ainsi que des octets, sans construire de [`VaultKey`].
+///
+/// # Errors
+/// `vault_key` de longueur invalide, échec HKDF / CSPRNG / chiffrement / sérialisation.
+pub fn encrypt_entry_bytes(vault_key: &[u8], entry_id: &[u8], plaintext: &[u8]) -> Result<Vec<u8>> {
+    let vault_key = VaultKey::from_slice(vault_key)?;
+    let ciphertext = encrypt_entry(&vault_key, entry_id, plaintext)?;
+    crate::codec::encode(&ciphertext)
+}
+
+/// Variante **orientée octets** de [`decrypt_entry`] : `ciphertext` = `Ciphertext`
+/// **encodé** (postcard).
+///
+/// # Errors
+/// `vault_key` / `ciphertext` invalide, mauvaise clé, mauvais `entry_id`, ou altération.
+pub fn decrypt_entry_bytes(
+    vault_key: &[u8],
+    entry_id: &[u8],
+    ciphertext: &[u8],
+) -> Result<Vec<u8>> {
+    let vault_key = VaultKey::from_slice(vault_key)?;
+    let ciphertext: Ciphertext = crate::codec::decode(ciphertext)?;
+    decrypt_entry(&vault_key, entry_id, &ciphertext)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -110,5 +137,26 @@ mod tests {
         let vk = vk();
         let ct = encrypt_entry(&vk, b"e", b"").unwrap();
         assert_eq!(decrypt_entry(&vk, b"e", &ct).unwrap(), b"");
+    }
+
+    #[test]
+    fn bytes_wrappers_roundtrip() {
+        let key = [7u8; KEY_LEN];
+        let encoded = encrypt_entry_bytes(&key, b"entry-1", b"secret").unwrap();
+        assert_eq!(
+            decrypt_entry_bytes(&key, b"entry-1", &encoded).unwrap(),
+            b"secret"
+        );
+    }
+
+    #[test]
+    fn bytes_wrappers_reject_bad_inputs() {
+        // Clé de longueur invalide.
+        assert!(encrypt_entry_bytes(&[0u8; 31], b"e", b"x").is_err());
+        // Mauvaise clé au déchiffrement.
+        let ct = encrypt_entry_bytes(&[1u8; KEY_LEN], b"e", b"x").unwrap();
+        assert!(decrypt_entry_bytes(&[2u8; KEY_LEN], b"e", &ct).is_err());
+        // Ciphertext encodé illisible.
+        assert!(decrypt_entry_bytes(&[1u8; KEY_LEN], b"e", b"pas-du-postcard").is_err());
     }
 }
