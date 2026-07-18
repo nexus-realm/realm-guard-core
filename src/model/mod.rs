@@ -38,7 +38,7 @@ use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 
-use crate::crdt::{AddWinsSet, DeviceId, DotContext, LwwRegister, Timestamp};
+use crate::crdt::{AddWinsSet, DeviceId, DotContext, Hlc, LwwRegister, Timestamp};
 use crate::error::{Error, Result};
 
 /// Identifiant global d'une entrée (UUID 16 octets) — unique entre appareils.
@@ -196,6 +196,22 @@ impl<V: Ord + Clone> VaultDoc<V> {
         self.entries.context()
     }
 
+    /// Plus grand [`Hlc`] parmi **tous** les registres de champ (entrées présentes
+    /// *ou* tombstonées) ; `None` si aucun champ n'a jamais été écrit.
+    ///
+    /// Sert à **avancer l'horloge locale après un merge distant** : sans cela, une
+    /// écriture locale ultérieure estampillée d'un HLC inférieur à une valeur
+    /// distante déjà fusionnée la perdrait en LWW. Les registres tombstonés
+    /// comptent aussi : un ré-ajout suivi d'édition doit rester au-dessus.
+    #[must_use]
+    pub fn max_hlc(&self) -> Option<Hlc> {
+        self.fields
+            .values()
+            .flat_map(|entry_fields| entry_fields.values())
+            .map(|reg| reg.timestamp().hlc)
+            .max()
+    }
+
     /// Fusionne (join) un autre document — ou un delta partiel. Idempotent /
     /// commutatif / associatif (produit de CRDT : `AddWinsSet` ⊗ registres LWW).
     pub fn merge(&mut self, other: &Self) {
@@ -265,6 +281,42 @@ mod tests {
         );
         // Entrée sans champ → itérateur vide (pas de panique).
         assert_eq!(d.entry_fields(&eid(9)).count(), 0);
+    }
+
+    #[test]
+    fn max_hlc_tracks_highest_register() {
+        let mut d = VaultDoc::new();
+        let x = eid(1);
+        d.add_entry(x, dev(1));
+        assert_eq!(d.max_hlc(), None); // aucun champ écrit
+        d.set_field(x, FieldId(0), 1u8, ts(10, 1));
+        d.set_field(x, FieldId(1), 2u8, ts(30, 1));
+        d.set_field(x, FieldId(2), 3u8, ts(20, 1));
+        assert_eq!(
+            d.max_hlc(),
+            Some(Hlc {
+                wall_ms: 30,
+                counter: 0
+            })
+        );
+    }
+
+    #[test]
+    fn max_hlc_counts_tombstoned_entry_fields() {
+        // Un champ d'une entrée retirée compte encore : après ré-ajout + édition,
+        // l'horloge locale doit rester au-dessus.
+        let mut d = VaultDoc::new();
+        let x = eid(1);
+        d.add_entry(x, dev(1));
+        d.set_field(x, FieldId(0), 1u8, ts(42, 1));
+        d.remove_entry(&x);
+        assert_eq!(
+            d.max_hlc(),
+            Some(Hlc {
+                wall_ms: 42,
+                counter: 0
+            })
+        );
     }
 
     #[test]
