@@ -9,3 +9,19 @@ publish = false
 
 [dependencies]
 thiserror = "2"
+argon2 = "0.5"
+bip39 = { version = "2", features = ["zeroize"] }
+chacha20poly1305 = "0.10"
+ed25519-dalek = { version = "2", features = ["zeroize"] }
+getrandom = "0.2"
+hkdf = "0.12"
+opaque-ke = { version = "4", features = ["argon2"] }
+postcard = { version = "1", features = ["use-std"] }
+rand = { version = "0.8", default-features = false, features = ["getrandom"] }
+serde = { version = "1", features = ["derive"] }
+sha2 = "0.10"
+x25519-dalek = { version = "2", features = ["static_secrets", "zeroize"] }
+zeroize = { version = "1", features = ["derive"] }
+
+[dev-dependencies]
+proptest = "1"

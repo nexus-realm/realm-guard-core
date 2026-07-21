@@ -1,10 +1,10 @@
-# CI de realm-guard-core : format, lint, tests, chaîne d'approvisionnement.
+# CI (PR) de realm-guard-core : nommage des branches (flux GitFlow) + qualité.
+# Flux : (feature|fix|chore)/rg-N → develop → staging → main ; hotfix/rg-N → main.
 name: CI
 
 on:
-  push:
-    branches: [main, develop]
   pull_request:
+    types: [opened, edited, synchronize, reopened]
 
 permissions:
   contents: read
@@ -14,7 +14,47 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  check:
+  check-branches:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Validate branch workflow
+        # Passé par l'environnement (jamais interpolé dans le script) → anti-injection.
+        env:
+          SOURCE_BRANCH: ${{ github.head_ref }}
+          TARGET_BRANCH: ${{ github.base_ref }}
+        run: |
+          echo "Vérification : $SOURCE_BRANCH -> $TARGET_BRANCH"
+
+          # develop -> staging (coupe d'une beta)
+          if [[ "$SOURCE_BRANCH" == "develop" && "$TARGET_BRANCH" == "staging" ]]; then
+            echo "✅ develop -> staging"; exit 0
+          fi
+          # staging -> main (promotion)
+          if [[ "$SOURCE_BRANCH" == "staging" && "$TARGET_BRANCH" == "main" ]]; then
+            echo "✅ staging -> main"; exit 0
+          fi
+          # hotfix/rg-N -> main
+          if [[ "$SOURCE_BRANCH" =~ ^hotfix/rg-[0-9]+$ && "$TARGET_BRANCH" == "main" ]]; then
+            echo "✅ hotfix/rg-* -> main"; exit 0
+          fi
+          # (feature|fix|chore)/rg-N -> develop
+          if [[ "$SOURCE_BRANCH" =~ ^(feature|fix|chore)/rg-[0-9]+$ && "$TARGET_BRANCH" == "develop" ]]; then
+            echo "✅ (feature|fix|chore)/rg-* -> develop"; exit 0
+          fi
+
+          echo "❌ ERREUR : nommage de branche source ou branche cible invalide."
+          echo "Règles autorisées :"
+          echo "- (feature|fix|chore)/rg-[numéro] -> develop"
+          echo "- develop -> staging"
+          echo "- staging -> main"
+          echo "- hotfix/rg-[numéro] -> main"
+          exit 1
+
+  quality:
+    needs: check-branches
+    # Inutile de tout relancer sur une simple édition de titre/description de PR.
+    if: github.event.action != 'edited'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -29,8 +69,14 @@ jobs:
         run: cargo clippy --all-targets --all-features -- -D warnings
       - name: Test
         run: cargo test --all-features
+      - name: Docs
+        env:
+          RUSTDOCFLAGS: "-D warnings"
+        run: cargo doc --no-deps --all-features
 
   deny:
+    needs: check-branches
+    if: github.event.action != 'edited'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:

@@ -22,4 +22,8 @@ pub enum Error {
     /// (Dé)sérialisation.
     #[error("serialization error: {0}")]
     Serialization(String),
+
+    /// Authentification OPAQUE (register/login, message invalide, mot de passe…).
+    #[error("auth error: {0}")]
+    Auth(String),
 }
