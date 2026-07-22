@@ -1,4 +1,6 @@
 /target
+# Rapport de couverture exporté (cargo cov-lcov)
+lcov.info
 node_modules/
 .idea/
 # Cargo.lock EST versionné : dépendance privée, sensible côté sécurité
