@@ -50,7 +50,9 @@ cargo cov-lcov   # export lcov.info
 ```
 
 Niveau actuel : **94,6 % de lignes** sur 103 tests, **sans aucune exclusion** — le
-cœur est du Rust pur, tout y est atteignable depuis `cargo test`. La CI publie le
+cœur est du Rust pur, tout y est atteignable depuis `cargo test`. Comme partout
+avec `cargo-llvm-cov`, ce chiffre inclut les modules `#[cfg(test)]` ; sur le seul
+code de production, la couverture est de **94,2 %**. La CI publie le
 résumé à chaque PR sans jamais bloquer (job `coverage`, aucun seuil).
 
 ## Release
