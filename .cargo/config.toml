@@ -1,0 +1,16 @@
+# Alias de couverture — `cargo-llvm-cov` (instrumentation LLVM native, pas de
+# réécriture de source). Installation une fois :
+#
+#   rustup component add llvm-tools-preview
+#   cargo install cargo-llvm-cov
+#
+# Aucun fichier n'est exclu du rapport : le cœur est du Rust pur, sans couche
+# plateforme ni code généré — tout y est atteignable depuis `cargo test`. Toute
+# exclusion future doit être justifiée ici même.
+[alias]
+# Résumé par fichier (le chiffre à surveiller : colonne « Lines »).
+cov = ["llvm-cov", "--all-features", "--summary-only"]
+# Rapport HTML navigable (target/llvm-cov/html/index.html).
+cov-html = ["llvm-cov", "--all-features", "--html"]
+# Export lcov pour un consommateur externe (CI, éditeur).
+cov-lcov = ["llvm-cov", "--all-features", "--lcov", "--output-path", "lcov.info"]

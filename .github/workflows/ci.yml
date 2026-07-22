@@ -90,3 +90,31 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: EmbarkStudios/cargo-deny-action@v2
+
+  # Rapport de couverture — **informatif, jamais bloquant** : aucun seuil, et
+  # `continue-on-error` pour qu'une panne d'outillage ne ferme pas une PR. Le
+  # résumé est publié dans l'onglet Summary de l'exécution.
+  coverage:
+    needs: check-branches
+    if: github.event.action != 'edited'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.97.0
+        with:
+          components: llvm-tools-preview
+      - uses: Swatinem/rust-cache@v2
+      - uses: taiki-e/install-action@cargo-llvm-cov
+      - name: Couverture
+        run: cargo llvm-cov --all-features --summary-only | tee coverage.txt
+      - name: Résumé
+        if: always()
+        run: |
+          {
+            echo '## Couverture (cœur)'
+            echo '```'
+            cat coverage.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
