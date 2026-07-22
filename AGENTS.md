@@ -73,7 +73,8 @@ cargo cov-lcov   # lcov.info for an external consumer
 **Nothing is excluded from the report** — the crate is pure Rust with no platform
 layer and no generated code, so every line is reachable from `cargo test`. Any
 future exclusion must be justified in `.cargo/config.toml` itself. Baseline:
-**94.6 % of lines**, 103 tests. CI publishes the summary on every PR via a
+**94.6 % of lines**, 103 tests — that figure, like every `cargo-llvm-cov` one,
+**includes inline `#[cfg(test)]` modules**; production code alone is at 94.2 %. CI publishes the summary on every PR via a
 `coverage` job that is **non-blocking** (`continue-on-error`, no threshold).
 
 ## 6. Release (GitFlow + git-cliff)
