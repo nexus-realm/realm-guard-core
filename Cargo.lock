@@ -839,7 +839,7 @@ dependencies = [
  "bip39",
  "chacha20poly1305",
  "ed25519-dalek 3.0.0",
- "getrandom 0.2.17",
+ "getrandom 0.4.3",
  "hkdf",
  "opaque-ke",
  "postcard",
