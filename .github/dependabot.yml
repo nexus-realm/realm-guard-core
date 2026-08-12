@@ -1,0 +1,50 @@
+# Mises à jour de dépendances — mensuelles, groupées (cf. docs/DEPENDENCIES.md).
+#
+# Gérés : cargo (le lock est réécrit et versionné), npm (husky/commitlint), GitHub
+# Actions. Le supply-chain reste gardé par `cargo-deny` (job `deny` du CI).
+#
+# Cible `develop` ; branches `dependabot/*` autorisées par `check-branches`. La CI
+# du cœur n'utilise aucun secret externe (GITHUB_TOKEN seul) → rien à ajouter au
+# Dependabot secrets store.
+version: 2
+updates:
+  - package-ecosystem: "cargo"
+    directory: "/"
+    target-branch: "develop"
+    schedule:
+      interval: "monthly"
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "chore(deps)"
+      prefix-development: "chore(deps-dev)"
+    groups:
+      cargo-minor-patch:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+
+  - package-ecosystem: "npm"
+    directory: "/"
+    target-branch: "develop"
+    schedule:
+      interval: "monthly"
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "chore(deps)"
+      prefix-development: "chore(deps-dev)"
+    groups:
+      npm-minor-patch:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    target-branch: "develop"
+    schedule:
+      interval: "monthly"
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "chore(deps)"
+    groups:
+      github-actions:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
