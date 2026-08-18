@@ -43,12 +43,28 @@ jobs:
             echo "✅ (feature|fix|chore)/rg-* -> develop"; exit 0
           fi
 
+          # main -> develop (back-merge de release) : après une promotion, main
+          # porte le commit chore(release) + le CHANGELOG ; on les redescend dans
+          # la ligne de développement pour que les branches ne divergent pas.
+          if [[ "$SOURCE_BRANCH" == "main" && "$TARGET_BRANCH" == "develop" ]]; then
+            echo "✅ back-merge de release main -> develop"; exit 0
+          fi
+
+          # dependabot/* -> develop : les PR de mise à jour de dépendances ne
+          # peuvent pas nommer en rg-<N> (pas de ticket) ; on les autorise. Le
+          # reste du gate (fmt/clippy/test/doc/deny) tourne et valide la mise à jour.
+          if [[ "$SOURCE_BRANCH" == dependabot/* && "$TARGET_BRANCH" == "develop" ]]; then
+            echo "✅ dependabot/* -> develop"; exit 0
+          fi
+
           echo "❌ ERREUR : nommage de branche source ou branche cible invalide."
           echo "Règles autorisées :"
           echo "- (feature|fix|chore)/rg-[numéro] -> develop"
           echo "- develop -> staging"
           echo "- staging -> main"
+          echo "- main -> develop (back-merge de release)"
           echo "- hotfix/rg-[numéro] -> main"
+          echo "- dependabot/* -> develop (mise à jour de dépendances)"
           exit 1
 
   quality:
@@ -58,7 +74,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@1.97.0
         with:
           components: rustfmt, clippy
@@ -80,5 +96,33 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: EmbarkStudios/cargo-deny-action@v2
+
+  # Rapport de couverture — **informatif, jamais bloquant** : aucun seuil, et
+  # `continue-on-error` pour qu'une panne d'outillage ne ferme pas une PR. Le
+  # résumé est publié dans l'onglet Summary de l'exécution.
+  coverage:
+    needs: check-branches
+    if: github.event.action != 'edited'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@1.97.0
+        with:
+          components: llvm-tools-preview
+      - uses: Swatinem/rust-cache@v2
+      - uses: taiki-e/install-action@cargo-llvm-cov
+      - name: Couverture
+        run: cargo llvm-cov --all-features --summary-only | tee coverage.txt
+      - name: Résumé
+        if: always()
+        run: |
+          {
+            echo '## Couverture (cœur)'
+            echo '```'
+            cat coverage.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

@@ -40,6 +40,21 @@ cargo deny check    # chaîne d'approvisionnement (nécessite cargo-deny)
 - Édition Rust **2024**, MSRV **1.85**.
 - `.gitattributes` force `*.sql`/fichiers sensibles en LF (checksums stables).
 
+### Couverture de tests
+
+```bash
+rustup component add llvm-tools-preview && cargo install cargo-llvm-cov  # une fois
+cargo cov        # résumé par fichier (colonne « Lines »)
+cargo cov-html   # rapport navigable : target/llvm-cov/html/index.html
+cargo cov-lcov   # export lcov.info
+```
+
+Niveau actuel : **94,6 % de lignes** sur 103 tests, **sans aucune exclusion** — le
+cœur est du Rust pur, tout y est atteignable depuis `cargo test`. Comme partout
+avec `cargo-llvm-cov`, ce chiffre inclut les modules `#[cfg(test)]` ; sur le seul
+code de production, la couverture est de **94,2 %**. La CI publie le
+résumé à chaque PR sans jamais bloquer (job `coverage`, aucun seuil).
+
 ## Release
 
 Bibliothèque **non publiée sur crates.io** (`publish = false`) : les consommateurs

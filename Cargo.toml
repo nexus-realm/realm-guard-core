@@ -1,6 +1,6 @@
 [package]
 name = "realm-guard-core"
-version = "1.0.0"
+version = "1.0.1"
 edition = "2024"
 rust-version = "1.85"
 description = "Shared core (E2EE crypto + custom delta-state CRDT) for Realm Guard multi-device sync."
@@ -12,7 +12,7 @@ thiserror = "2"
 argon2 = "0.5"
 bip39 = { version = "2", features = ["zeroize"] }
 chacha20poly1305 = "0.10"
-ed25519-dalek = { version = "2", features = ["zeroize"] }
+ed25519-dalek = { version = "3", features = ["zeroize"] }
 getrandom = "0.2"
 hkdf = "0.12"
 opaque-ke = { version = "4", features = ["argon2"] }

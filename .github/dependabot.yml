@@ -1,0 +1,70 @@
+# Mises à jour de dépendances — mensuelles, groupées (cf. docs/DEPENDENCIES.md).
+#
+# Gérés : cargo (le lock est réécrit et versionné), npm (husky/commitlint), GitHub
+# Actions. Le supply-chain reste gardé par `cargo-deny` (job `deny` du CI).
+#
+# Cible `develop` ; branches `dependabot/*` autorisées par `check-branches`. La CI
+# du cœur n'utilise aucun secret externe (GITHUB_TOKEN seul) → rien à ajouter au
+# Dependabot secrets store.
+version: 2
+updates:
+  - package-ecosystem: "cargo"
+    directory: "/"
+    target-branch: "develop"
+    schedule:
+      interval: "monthly"
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "chore(deps)"
+      prefix-development: "chore(deps-dev)"
+    groups:
+      cargo-minor-patch:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+    ignore:
+      # Génération RustCrypto (digest 0.11) : bloquée tant qu'`opaque-ke` (épinglé
+      # sur digest 0.10) n'a pas migré — sha2 0.11 / hkdf 0.13 cassent les bornes de
+      # trait (`sha2::Sha512: opaque_ke::hash::Hash` non satisfait ; PR #30/#31).
+      # On garde les patches (0.x.y), on bloque le saut de minor. **Retirer ces
+      # lignes** quand opaque-ke supporte la nouvelle génération.
+      - dependency-name: "sha2"
+        update-types: ["version-update:semver-minor", "version-update:semver-major"]
+      - dependency-name: "hkdf"
+        update-types: ["version-update:semver-minor", "version-update:semver-major"]
+      # getrandom 0.3+ change l'API et est épinglé par l'écosystème rand/opaque-ke
+      # (PR #32). Patches 0.2.x OK, saut de minor bloqué.
+      - dependency-name: "getrandom"
+        update-types: ["version-update:semver-minor", "version-update:semver-major"]
+
+  - package-ecosystem: "npm"
+    directory: "/"
+    target-branch: "develop"
+    schedule:
+      interval: "monthly"
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "chore(deps)"
+      prefix-development: "chore(deps-dev)"
+    groups:
+      npm-minor-patch:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    target-branch: "develop"
+    schedule:
+      interval: "monthly"
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "chore(deps)"
+    groups:
+      github-actions:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+    ignore:
+      # `dtolnay/rust-toolchain@<X>` : le "tag" est une **version de Rust**, pas un
+      # tag d'action. Dependabot le prend pour du semver et invente des versions
+      # inexistantes (PR #24 : Rust 1.100.0 → 404 au download). La toolchain se
+      # bumpe à la main (cf. docs/DEPENDENCIES.md).
+      - dependency-name: "dtolnay/rust-toolchain"
