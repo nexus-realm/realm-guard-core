@@ -1,6 +1,23 @@
 # Changelog
 
 Toutes les modifications notables de ce projet sont documentées ici.
+## [1.0.1] - 2026-08-18
+
+### Divers
+- **coverage** : Add cargo-llvm-cov aliases and a non-blocking CI report
+- **deps** : Bump softprops/action-gh-release from 2 to 3
+- **deps** : Bump actions/checkout from 4 to 7
+- **deps-dev** : Bump @commitlint/config-conventional
+- **deps** : Bump the cargo-minor-patch group with 2 updates
+- **deps** : Bump ed25519-dalek from 2.2.0 to 3.0.0
+
+### Documentation
+- **coverage** : Note that llvm-cov figures include inline test modules
+
+### Intégration continue
+- Allow the main -> develop release back-merge in the branch check
+- **deps** : Set up monthly grouped Dependabot updates
+- **deps** : Ignore blocked RustCrypto bumps and the rust-toolchain pseudo-tag
 ## [1.0.0] - 2026-07-21
 
 ### Divers
